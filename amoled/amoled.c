@@ -114,7 +114,7 @@ static const amoled_rotation_t ORIENTATIONS_CO5300[4] = {
 24bpp = 3 bytes continuous 8bit/Bytes RBG
 Bit transmission is LSB first and MSB then !*/
 
-#Library for now only works with 16BPP
+//Library for now only works with 16BPP
 static const bpp_process_t BPP_PROCESS_GEN[3] = {
     { 0xF800, 11, 0x07E0, 5, 0x001F},		//16bpp
     { 0x3F0000, 16, 0x003F00, 8, 0x00003F}, //18bpp
@@ -3194,3 +3194,4 @@ MP_REGISTER_MODULE(MP_QSTR_amoled, mp_module_amoled);
 #else
 MP_REGISTER_MODULE(MP_QSTR_amoled, mp_module_amoled, MODULE_AMOLED_ENABLE);
 #endif
+
