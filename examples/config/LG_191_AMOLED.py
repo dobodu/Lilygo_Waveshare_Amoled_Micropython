@@ -3,7 +3,7 @@ import amoled   # Screen driver
 
 TFT_SD0 = Pin(8,Pin.OUT)   # SERIAL OUTPUT SIGNAL
 TFT_TE  = Pin(9,Pin.OUT)   # TEARING EFFET CONTROL
-TFT_CS  = Pin(06,Pin.OUT)   # CHIP SELECT
+TFT_CS  = Pin(6,Pin.OUT)   # CHIP SELECT
 TFT_SCK = Pin(47,Pin.OUT)   # SPICLK_P
 TFT_MOSI = None
 TFT_MISO = None
