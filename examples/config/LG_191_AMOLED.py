@@ -1,20 +1,20 @@
 from machine import Pin, I2C, SPI
 import amoled   # Screen driver
 
-TFT_SD0 = Pin(08,Pin.OUT)   # SERIAL OUTPUT SIGNAL
-TFT_TE  = Pin(09,Pin.OUT)   # TEARING EFFET CONTROL
+TFT_SD0 = Pin(8,Pin.OUT)   # SERIAL OUTPUT SIGNAL
+TFT_TE  = Pin(9,Pin.OUT)   # TEARING EFFET CONTROL
 TFT_CS  = Pin(06,Pin.OUT)   # CHIP SELECT
 TFT_SCK = Pin(47,Pin.OUT)   # SPICLK_P
 TFT_MOSI = None
 TFT_MISO = None
 TFT_RST = Pin(17,Pin.OUT)   # RESET
 TFT_D0  = Pin(18,Pin.OUT)   # D0 QSPI
-TFT_D1  = Pin(07,Pin.OUT)   # D1 QSPI
+TFT_D1  = Pin(7,Pin.OUT)   # D1 QSPI
 TFT_D2  = Pin(48,Pin.OUT)   # D2 QSPI & SPICLK_N
-TFT_D3  = Pin(05,Pin.OUT)   # D3 QSPI
+TFT_D3  = Pin(5,Pin.OUT)   # D3 QSPI
 TFT_CDE = Pin(38,Pin.OUT)   #GPIO38 NEEDED FOR SCREEN ON
-I2C0_SCL = Pin(02)          #TOUCH I2C SCL 
-I2C0_SDA = Pin(03)          #TOUCH I2C SCA
+I2C0_SCL = Pin(2)          #TOUCH I2C SCL 
+I2C0_SDA = Pin(3)          #TOUCH I2C SCA
 
 TFT_WIDTH = 536
 TFT_HEIGHT = 240
