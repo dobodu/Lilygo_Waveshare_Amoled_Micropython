@@ -6,7 +6,7 @@
 # Animated bitmap can be created thank to ffmpeg
 # command line example
 #
-# ffmpeg -i movie.mp4 -f rawvideo -pix_fmt rgb565be -vframes 50 -s 72x128 out.565
+# ffmpeg -i movie.mp4 -f rawvideo -pix_fmt rgb565be -vframes 50 -s 72x128 ani.565
 
 
 import utime
