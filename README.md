@@ -109,7 +109,7 @@ The firmware is provided each time when I update this repo.
 - As far as I know everything is working as expected
 
 ## To-DO List : 
-- add True Type Font support
+- add buffered True Type Font in order to accelerate the display rendering when always using the same size font
 
 ## Features
 
