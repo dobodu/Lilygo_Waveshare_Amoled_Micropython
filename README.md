@@ -48,9 +48,8 @@ The driver involves a frame buffer of 536x240, requiring 280ko of available ram 
 In a more general way, requirements are WIDTH x HEIGHT x 2 bytes or ram.
 
 Latest firmware is build with
-- Micropython 1.26.1
+- Micropython 1.28.0
 - ESP IDF toolchain 5.5.2
-
 
 Contents:
 
