@@ -1,8 +1,12 @@
 
 ## Lilygo and Waveshare Amoled Series Micropython firmware with Graphic Support
-**NB : this is a totally different project from LVGL**
+
+> [!NOTE]
+> **this is a totally different project from LVGL**
 
 --------------------------------------------------------------------------------------------------
+
+**Updated 10/05/2026 : NEW MICROPYTHON 1.28 VERSION AND NEW BETA (ACCELERATED TTF DRAWING)**
 
 **Updated 05/01/2026 : ARTEFACTS GONE AWAY...**
 
@@ -34,24 +38,27 @@ Above examples where established with a Waveshare AMOLED 1.8", Top corner values
 - Waveshare ESP32-S3 1.8 inches AMOLED Touch
 - Waveshare ESP32-S3 2.41 inches AMOLED Touch
 
-This Micropython driver is created on behalf of [nspsck](https://github.com/nspsck/RM67162_Micropython_QSPI) RM67162 driver.
-It is also convergent with [russhugues](https://github.com/russhughes/st7789_mpy) ST7789 driver.
-I also would like to thanks [lewisxhe](https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series). Your advices helped me a lot.
-Finally, I must talk of [tomolt](https://github.com/tomolt/libschrift). The libschrift TTF lightweight library truelly rocks !
-
-
 My main goal was to adapt a driver library that would give the same functions thant ST7789 driver, in order to
 be able to get my micropythons projects working whether on PICO + ST7789 or ESP32 + RM690B0 or ESP32 + RM67162
 
-The driver involves a frame buffer of 600x450, requiring 540ko of available ram (T4-S3 version).
-The driver involves a frame buffer of 536x240, requiring 280ko of available ram (TDisplay S3 version).
-In a more general way, requirements are WIDTH x HEIGHT x 2 bytes or ram.
-
 Latest firmware is build with
-- Micropython 1.28.0
-- ESP IDF toolchain 5.5.2
+```
+Micropython 1.28.0
+ESP IDF toolchain 5.5.2
+```
 
-Contents:
+> [!NOTE]
+> * This Micropython driver is created on behalf of [nspsck](https://github.com/nspsck/RM67162_Micropython_QSPI) RM67162 driver.
+> * t is also convergent with [russhugues](https://github.com/russhughes/st7789_mpy) ST7789 driver.
+> * I also would like to thanks [lewisxhe](https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series). Your advices helped me a lot.
+> * Finally, I must talk of [tomolt](https://github.com/tomolt/libschrift). The libschrift TTF lightweight library truelly rocks !
+
+> [!IMPORTANT]
+> * The driver involves a frame buffer of 600x450, requiring 540ko of available ram (T4-S3 version).
+> * The driver involves a frame buffer of 536x240, requiring 280ko of available ram (TDisplay S3 version).
+> * In a more general way, requirements are WIDTH x HEIGHT x 2 bytes or ram (16bpp).
+
+## Contents:
 
 - [Lilygo Amoled Series Micropython firmware with Graphic Support](#Lilygo)
 - [Introduction](#introduction)
@@ -59,8 +66,6 @@ Contents:
 - [Documentation](#documentation) 
 - [How to build](#build)
 - [Optional Scripts](#optional-scripts)
-
-
 
 ## Introduction
 This is the successor of the previous [lcd_binding_micropython](https://github.com/nspsck/lcd_binding_micropython). 
@@ -107,8 +112,11 @@ The firmware is provided each time when I update this repo.
 ## to check : 
 - As far as I know everything is working as expected
 
-## To-DO List : 
-- add buffered True Type Font in order to accelerate the display rendering when always using the same size font
+## To do list :
+- [x] Add buffered True Type Font in order to accelerate the display rendering when always using the same size font
+- [x] Realease a Micropython 1.28 version :tada:
+- [x] Include TrueType fonts rendering :tada:
+- [ ] Bug correction as always... Please push the issues you will discover
 
 ## Features
 
@@ -379,14 +387,23 @@ dir(amoled.AMOLED)
 For ttf font you have to declare
 
   - `ttf_font = amoled.TTF(ttf="path_to_ttf_font.ttf", xscale = xx, yscale = yy, kerning = true/false)`
-  Create a font object depending on the path file given, defaut scales are 16, and kerning correction to shorten "VA" space, is true by default 
+  Creates a font object depending on the path file given, defaut scales are 16, and kerning correction to shorten "VA" space, is true by default 
 
   - `ttf_font.scale(xscale, yscale)`
-  Allows to resize font directly
+  Resizes font directly
 
 - `ttf_font.deinit()`
-  Will release font
+  Releases font from memory
 
+- `glyphset = display.ttf_gl_create(ttf_font,s)`
+  Creates a glyphset keep it into memory for every char in the string s
+
+- `display.ttf_gl_draw(glyphset, s, x, y[, fg, bg])`
+  Displays just like ttf_draw but using the pre-rendered glyphset stored in memory
+
+- `display.ttf_gl_release(glyphset)`
+  Releases pre-rendered glyphset from memory
+  
 
 ## Related Repositories
 
