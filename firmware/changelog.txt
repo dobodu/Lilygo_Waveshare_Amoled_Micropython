@@ -1,3 +1,13 @@
+firmware_2026_05_10_ALPHA.bin
+
+Very first (probably buggy yet) version with accelerated TTF rendering (buffered glyphsets)
+
+MicroPython Version :  MicroPython v1.28
+ESP-IDF Version : 5.5.2
+BOARD : LILYGO T4-S3 with ESP32S3 (but work with every Amoled boards)
+
+===============================================================================
+
 firmware_2026_05_02.bin
 
 MicroPython Version :  MicroPython v1.28
@@ -82,12 +92,3 @@ firmware_2024_12_23.bin
 MicroPython Version : v1.25.0
 ESP-IDF Version : 5.2.3
 BOARD : ESP32S3 microcontroller with 16MB of Flash & Octal-SPIRAM with ESP32S3
-
-
-
-
-
-
-
-
-
