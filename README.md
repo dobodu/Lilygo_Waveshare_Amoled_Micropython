@@ -131,14 +131,15 @@ Supported boards：
 - [WAVESHARE ESP32-S3 1.8 AMOLED](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm)
 - [WAVESHARE ESP32-S3 2.41 AMOLED](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm)
 
-| Driver IC | Display IC |    SPI    |   QSPI    |   I8080   |   DPI     |
-| --------- | ---------- | --------- | --------- | --------- | --------- |
-| ESP32-S3  |  RM690B0   |    NO     |   YES     |    NO     |    NO     |
-| ESP32-S3  |  RM67162   |    NO     |   YES     |    NO     |    NO     |
-| ESP32-S3  |  SH8601    |    NO     |   YES     |    NO     |    NO     |
-| ESP32-S3  |  CO5300 *  |    NO     |   YES     |    NO     |    NO     |
+| Driver IC | Display IC |    SPI    |   QSPI    |   I8080   |   DPI     |  ROTATIONS  |
+| --------- | ---------- | --------- | --------- | --------- | --------- | ----------- |
+| ESP32-S3  |  RM690B0   |    NO     |   YES     |    NO     |    NO     |     YES     |
+| ESP32-S3  |  RM67162   |    NO     |   YES     |    NO     |    NO     |     YES     |
+| ESP32-S3  |  SH8601    |    NO     |   YES     |    NO     |    NO     |     NO*     |
+| ESP32-S3  |  CO5300**  |    NO     |   YES     |    NO     |    NO     |             |
 
-*very early support (not tested yet)
+* SH8601 only support Flipping display in horizontal axis.
+**very early support (not tested yet)
 
 Demonstration Video :
 - [Amoled Micropython Demo](https://www.youtube.com/watch?v=m3pqW5jGypQ)
