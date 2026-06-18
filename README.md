@@ -241,6 +241,10 @@ dir(amoled.AMOLED)
 - `rotation(value)`
 
   Rotate the display, value range: 0 - 3.
+  0 = normal
+  1 = 1/4 clockwise
+  2 = 1/2 clockwise
+  3 = 3/4 clockwise.
 
 - `tearing(tearing value, [scanline value])`
 
