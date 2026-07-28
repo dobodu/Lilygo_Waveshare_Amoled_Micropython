@@ -391,14 +391,15 @@ dir(amoled.AMOLED)
 
 For ttf font you have to declare
 
-  - `ttf_font = amoled.TTF(ttf="path_to_ttf_font.ttf", xscale = xx, yscale = yy, kerning = true/false)`
-  Creates a font object depending on the path file given, defaut scales are 16, and kerning correction to shorten "VA" space, is true by default 
+- `fnt = display.ttf_load("path_to_ttf_font.ttf")`
+  Creates a font object depending on the path file given,
+  You can created as many Font Objects as you need (and as your device memory can held)
 
-  - `ttf_font.scale(xscale, yscale)`
-  Resizes font directly
+- `display.ttf_scale(fnt, xscale, [yscale])`
+  Resizes font using xcale (if only one parameter is given) or xscale & yscale
 
-- `ttf_font.deinit()`
-  Releases font from memory
+- `display.ttf_free(fnt, xscale, [yscale])`
+  Free the fnt from memory
 
 - `glyphset = display.ttf_gl_create(ttf_font,s)`
   Creates a glyphset keep it into memory for every char in the string s
@@ -408,6 +409,19 @@ For ttf font you have to declare
 
 - `display.ttf_gl_release(glyphset)`
   Releases pre-rendered glyphset from memory
+
+  [DEPRECIATED PART ONLY for firmware version < 05/2026]
+
+- `font = display.amoled.TTF(ttf="path_to_ttf_font.ttf", xscale = xx, yscale = yy, kerning = true/false)`
+  Creates a font object depending on the path file given, defaut scales are 16, and kerning correction to shorten "VA" space, is true by default 
+
+- `ttf_font.scale(xscale, yscale)`
+  Resizes font directly
+
+- `ttf_font.deinit()`
+  Releases font from memory
+
+  [END OF DEPRECIATED PART]
   
 
 ## Related Repositories
