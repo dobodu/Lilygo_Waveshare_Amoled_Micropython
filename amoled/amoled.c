@@ -49,15 +49,23 @@ A major part of the code works for 16bpp colorset, event some other are already 
 #include <math.h>
 #include <wchar.h>
 
-#define AMOLED_DRIVER_VERSION "04.01.2026"
+#define AMOLED_DRIVER_VERSION "24.01.2026"
 
 #define SWAP16(a, b) { int16_t t = a; a = b; b = t; }
 #define ABS(N) (((N) < 0) ? (-(N)) : (N))
 #define mp_hal_delay_ms(delay) (mp_hal_delay_us(delay * 1000))
 
-#define MAX_POLY_CORNERS 32
+/* ESP32 Memory tweaks */
 
+#define RAM_ALIGN	(16)
+#define RAM_ALLOC	(MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)
+
+/*Library buffer limits*/
+
+#define MAX_POLY_CORNERS 32
 #define MAX_BUFFER  4800
+
+
 
 enum { SrcMapping, SrcUser };
 
@@ -103,8 +111,8 @@ static const amoled_rotation_t ORIENTATIONS_SH8601[4] = {
 static const amoled_rotation_t ORIENTATIONS_CO5300[4] = {
     { MADCTL_DEFAULT,                                 466, 466, 0, 0},
     { MADCTL_DEFAULT | MADCTL_MX_BIT,                 466, 466, 0, 0}, //Flipped X
-    { MADCTL_DEFAULT | MADCTL_MX_BIT |MADCTL_MY_BIT	  466, 466, 0, 0}, // 180°
-    { MADCTL_DEFAULT | MADCTL_MY_BIT,                 466, 466, 0, 0}  //Flipped 7
+    { MADCTL_DEFAULT | MADCTL_MX_BIT |MADCTL_MY_BIT,  466, 466, 0, 0}, // 180°
+    { MADCTL_DEFAULT | MADCTL_MY_BIT,                 466, 466, 0, 0}  //Flipped Y
 };
 
 
@@ -224,9 +232,10 @@ static mp_obj_t amoled_AMOLED_reset(mp_obj_t self_in) {
         mp_hal_pin_write(reset_pin, self->reset_level);
         mp_hal_delay_ms(300);    
         mp_hal_pin_write(reset_pin, !self->reset_level);
-        mp_hal_delay_ms(200);    
+        mp_hal_delay_ms(500);    
     } else {
         write_spi(self, LCD_CMD_SWRESET, NULL, 0);
+		mp_hal_delay_ms(500);
     }
 
     return mp_const_none;
@@ -284,6 +293,13 @@ static mp_obj_t amoled_AMOLED_init(mp_obj_t self_in) {
 			write_spi(self, LCD_CMD_WRCTRLD1, (uint8_t[]) {0x20}, 1);        // Set Brightness control ON to Display 1
 			write_spi(self, LCD_CMD_SETTSCANL, (uint8_t[]) {0x01, 0xC0}, 2); // SET TEAR SCANLINE TO N = 0x01C0 = 448
 		break;
+		case 3: //CO5300 Very first
+			write_spi(self, LCD_CMD_SETSPIMODE, (uint8_t[]) { 0x80 }, 1);    // QSPI MODE
+			write_spi(self, LCD_CMD_SETDISPMODE, (uint8_t[]) { 0x00 }, 1);   // DSPI MODE OFF
+			mp_hal_delay_ms(10);
+			write_spi(self, LCD_CMD_WRCTRLD1, (uint8_t[]) {0x20}, 1);        // Set Brightness control ON to Display 1
+			write_spi(self, LCD_CMD_SETTSCANL, (uint8_t[]) {0x01, 0xD2}, 2); // SET TEAR SCANLINE TO N = 0x01D2 = 466
+		break;
 	}
 		
 	//Setup Common Final
@@ -328,7 +344,7 @@ mp_obj_t amoled_AMOLED_make_new(const mp_obj_type_t *type, size_t n_args, size_t
         { MP_QSTR_bpp,              MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = 16}              },
 		{ MP_QSTR_rotation,         MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = 0}               },
 		{ MP_QSTR_auto_refresh,		MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_bool = true}           },
-		{ MP_QSTR_bus_methode,      MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = 0}               }, //FOR DEVELOPPEMENT PURPOSE
+		{ MP_QSTR_bus_methode,      MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = 0}               }, //FOR DEVELOPPEMENT PURPOSE ONLY
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all_kw_array(
@@ -425,7 +441,10 @@ mp_obj_t amoled_AMOLED_make_new(const mp_obj_type_t *type, size_t n_args, size_t
         break;
 		case 2:
             memcpy(&self->rotations, ORIENTATIONS_SH8601, sizeof(ORIENTATIONS_SH8601));
-        break;			
+        break;
+		case 3:
+            memcpy(&self->rotations, ORIENTATIONS_CO5300, sizeof(ORIENTATIONS_CO5300));
+        break;
 		default:
             mp_raise_ValueError(MP_ERROR_TEXT("Unsupported display type"));
         break;
@@ -437,8 +456,8 @@ mp_obj_t amoled_AMOLED_make_new(const mp_obj_type_t *type, size_t n_args, size_t
 	//Setup display rotation and get display parameters
 	set_rotation(self, self->rotation);
 	
-	//Allocate a corresponding frame buffer
-    self->fram_buf = heap_caps_aligned_calloc(RAM_ALIGNMENT, self->width * self->height, self->Bpp, MALLOC_CAP_8BIT |MALLOC_CAP_SPIRAM); 
+	//Allocate a corresponding frame buffer in SPIRAM
+    self->fram_buf = heap_caps_aligned_calloc(RAM_ALIGN, self->width * self->height, self->Bpp, RAM_ALLOC); 
 	
     if (self->fram_buf == NULL) {
         mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Failed to allocate Frame Buffer."));
@@ -467,20 +486,6 @@ static mp_obj_t amoled_AMOLED_deinit(mp_obj_t self_in) {
 static MP_DEFINE_CONST_FUN_OBJ_1(amoled_AMOLED_deinit_obj, amoled_AMOLED_deinit);
 
 
-static mp_obj_t amoled_TTF_deinit(mp_obj_t self_in) {
-    SFT *self = (SFT *)MP_OBJ_TO_PTR(self_in);
-
-    heap_caps_free((void *)self->font->memory);
-	self->font->memory = NULL;
-	heap_caps_free((void *)self->font);
-	self->font = NULL;
-
-    //m_del_obj(amoled_TTF_obj_t, self); 
-    return mp_const_none;
-}
-
-static MP_DEFINE_CONST_FUN_OBJ_1(amoled_TTF_deinit_obj, amoled_TTF_deinit);
-
 
 /*----------------------------------------------------------------------------------------------------
 Below are library information related functions.
@@ -501,21 +506,6 @@ static void amoled_AMOLED_print(const mp_print_t *print, mp_obj_t self_in, mp_pr
     );
 }
 
-//Print Font informations
-static void amoled_TTF_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t  kind) {
-    (void) kind;
-    SFT *self = MP_OBJ_TO_PTR(self_in);
-    mp_printf(
-        print,
-        "<AMOLED TTF - Scale X=%.1f Y=%.1f, Offset X=%.0f Y=%.0f, Kerning=%u, Flags=%u>",
-        self->xScale,
-        self->yScale,
-		self->xOffset,
-		self->yOffset,
-		self->kerning,
-		self->flags
-    );
-}
 
 static mp_obj_t amoled_AMOLED_version() {   
     return mp_obj_new_str(AMOLED_DRIVER_VERSION, 10);
@@ -607,7 +597,8 @@ static void refresh_display(amoled_AMOLED_obj_t *self, uint16_t x, uint16_t y, u
 			//Alignment doesn't seem to change anything (maybe faster...writing but still artefacts)
 			
 			temp_buf_size = w1 * h1;   // full buffered
-			self->temp_buf = heap_caps_aligned_calloc(RAM_ALIGNMENT, temp_buf_size, BPP, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+			//Allocate temporary buffer in Spiram
+			self->temp_buf = heap_caps_aligned_calloc(RAM_ALIGN, temp_buf_size, BPP, RAM_ALLOC);
 			
 			//Copy frame_buffer to partial_frame_buffer
 			size_t  fram_buf_idx = 0;
@@ -634,7 +625,7 @@ static void refresh_display(amoled_AMOLED_obj_t *self, uint16_t x, uint16_t y, u
 			//Hybrid method, copy to temp_fb without memcpy and write the full buffer to display
 			
 			temp_buf_size = w1 * h1;   // full buffered
-			self->temp_buf = heap_caps_aligned_calloc(RAM_ALIGNMENT, temp_buf_size, BPP, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+			self->temp_buf = heap_caps_aligned_calloc(RAM_ALIGN, temp_buf_size, BPP, RAM_ALLOC);
 			
 			//Copy frame_buffer to partial_frame_buffer
 			size_t  fram_buf_idx = 0;
@@ -1556,7 +1547,7 @@ static mp_obj_t amoled_AMOLED_polygon(size_t n_args, const mp_obj_t *args) {
             cy = mp_obj_get_int(args[7]);
         }
 
-        self->work = (void *) heap_caps_aligned_calloc(RAM_ALIGNMENT, poly_len, sizeof(Point), MALLOC_CAP_8BIT);
+        self->work = (void *) heap_caps_aligned_calloc(RAM_ALIGN, poly_len, sizeof(Point), MALLOC_CAP_8BIT);
         if (self->work) {
             Point *point = (Point *)self->work;
 
@@ -1742,7 +1733,7 @@ static mp_obj_t amoled_AMOLED_fill_polygon(size_t n_args, const mp_obj_t *args) 
             cy = mp_obj_get_int(args[7]);
         }
 
-        self->work = (void *) heap_caps_aligned_calloc(RAM_ALIGNMENT, poly_len, sizeof(Point), MALLOC_CAP_8BIT);
+        self->work = (void *) heap_caps_aligned_calloc(RAM_ALIGN, poly_len, sizeof(Point), MALLOC_CAP_8BIT);
         if (self->work) {
             Point *point = (Point *)self->work;
 
@@ -2051,153 +2042,8 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_write_len_obj, 3, 3, am
 
 
 /*---------------------------------------------------------------------------------------------------
-Below are Hershey Vectorial Fonts related functions
-----------------------------------------------------------------------------------------------------*/
-
-
-//	draw(font, string , x, y[, fg, bg])
-static mp_obj_t amoled_AMOLED_draw(size_t n_args, const mp_obj_t *args) {
-    amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(args[0]);	
-    mp_obj_module_t *hershey = MP_OBJ_TO_PTR(args[1]);
-	const char *str_8 = (char *) mp_obj_str_get_str(args[2]);
-	size_t str_8_len = strlen(str_8);
-    mp_int_t x = mp_obj_get_int(args[3]);
-    mp_int_t y = mp_obj_get_int(args[4]);
-    mp_int_t color = (n_args > 5) ? mp_obj_get_int(args[5]) : WHITE;
-
-    mp_float_t scale = 1.0;
-    if (n_args > 6) {
-        if (mp_obj_is_float(args[6])) {
-            scale = mp_obj_float_get(args[6]);
-        }
-        if (mp_obj_is_int(args[6])) {
-            scale = (mp_float_t)mp_obj_get_int(args[6]);
-        }
-    }
-
-	//Map Font properties
-    mp_obj_dict_t *dict = MP_OBJ_TO_PTR(hershey->globals);
-    mp_obj_t *index_data_buff = mp_obj_dict_get(dict, MP_OBJ_NEW_QSTR(MP_QSTR_INDEX));
-    mp_buffer_info_t index_bufinfo;
-    mp_get_buffer_raise(index_data_buff, &index_bufinfo, MP_BUFFER_READ);
-    uint8_t *index = index_bufinfo.buf;
-    mp_obj_t *font_data_buff = mp_obj_dict_get(dict, MP_OBJ_NEW_QSTR(MP_QSTR_FONT));
-    mp_buffer_info_t font_bufinfo;
-    mp_get_buffer_raise(font_data_buff, &font_bufinfo, MP_BUFFER_READ);
-    int8_t *font = font_bufinfo.buf;
-
-    int16_t from_x = x;
-    int16_t from_y = y;
-    int16_t to_x = x;
-    int16_t to_y = y;
-    int16_t pos_x = x;
-    int16_t pos_y = y;
-    bool penup = true;
-    char c;
-    int16_t ii;
-
-	for (uint8_t i = 0; i < str_8_len; i++) {
-    //while ((c = *s++)) {
-			c = str_8[i];
-			if (c >= 32 && c <= 127) {
-				ii = (c - 32) * 2;
-
-				int16_t offset = index[ii] | (index[ii + 1] << 8);
-				int16_t length = font[offset++];
-				int16_t left = (int)(scale * (font[offset++] - 0x52) + 0.5);
-				int16_t right = (int)(scale * (font[offset++] - 0x52) + 0.5);
-				int16_t width = right - left;
-
-				if (length) {
-					int16_t i;
-					for (i = 0; i < length; i++) {
-						if (font[offset] == ' ') {
-							offset += 2;
-							penup = true;
-							continue;
-						}
-
-						int16_t vector_x = (int)(scale * (font[offset++] - 0x52) + 0.5);
-						int16_t vector_y = (int)(scale * (font[offset++] - 0x52) + 0.5);
-
-						if (!i || penup) {
-							from_x = pos_x + vector_x - left;
-							from_y = pos_y + vector_y;
-						} else {
-							to_x = pos_x + vector_x - left;
-							to_y = pos_y + vector_y;
-
-							line(self, from_x, from_y, to_x, to_y, color);
-							from_x = to_x;
-							from_y = to_y;
-						}
-						penup = false;
-					}
-				}
-				pos_x += width;
-			}
-    }
-
-    return mp_const_none;
-}
-
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_draw_obj, 5, 7, amoled_AMOLED_draw);
-
-
-static mp_obj_t amoled_AMOLED_draw_len(size_t n_args, const mp_obj_t *args) {
-    //amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(args[0]); // No use 
-    mp_obj_module_t *hershey = MP_OBJ_TO_PTR(args[1]);
-	const char *str_8 = (char *) mp_obj_str_get_str(args[2]);
-	size_t str_8_len = strlen(str_8);
-
-    mp_float_t scale = 1.0;
-    if (n_args > 3) {
-        if (mp_obj_is_float(args[3])) {
-            scale = mp_obj_float_get(args[3]);
-        }
-        if (mp_obj_is_int(args[3])) {
-            scale = (mp_float_t)mp_obj_get_int(args[3]);
-        }
-    }
-
-	//Map font properties
-    mp_obj_dict_t *dict = MP_OBJ_TO_PTR(hershey->globals);
-    mp_obj_t *index_data_buff = mp_obj_dict_get(dict, MP_OBJ_NEW_QSTR(MP_QSTR_INDEX));
-    mp_buffer_info_t index_bufinfo;
-    mp_get_buffer_raise(index_data_buff, &index_bufinfo, MP_BUFFER_READ);
-    uint8_t *index = index_bufinfo.buf;
-    mp_obj_t *font_data_buff = mp_obj_dict_get(dict, MP_OBJ_NEW_QSTR(MP_QSTR_FONT));
-    mp_buffer_info_t font_bufinfo;
-    mp_get_buffer_raise(font_data_buff, &font_bufinfo, MP_BUFFER_READ);
-    int8_t *font = font_bufinfo.buf;
-
-    int16_t print_width = 0;
-    char c;
-    int16_t ii;
-
-	for (uint8_t i = 0; i < str_8_len; i++) {
-		c = str_8[i];
-        if (c >= 32 && c <= 127) {
-            ii = (c - 32) * 2;
-
-            int16_t offset = (index[ii] | (index[ii + 1] << 8)) + 1;
-            int16_t left =  font[offset++] - 0x52;
-            int16_t right = font[offset++] - 0x52;
-            int16_t width = right - left;
-            print_width += width;
-        }
-    }
-
-    return mp_obj_new_int((int)(print_width * scale + 0.5));
-}
-
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_draw_len_obj, 3, 4, amoled_AMOLED_draw_len);
-
-
-/*---------------------------------------------------------------------------------------------------
 Below are schrift TTF related functions
 ----------------------------------------------------------------------------------------------------*/
-
 
 /*
 //Convert UTF32 from UTF8
@@ -2239,44 +2085,33 @@ static size_t utf8_to_utf32(const char *utf8, uint32_t *utf32, size_t max)
 */
 
 //Create a font object holding the TTF and return the font object
-mp_obj_t amoled_TTF_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
-
-	enum {
-        ARG_ttf,
-		ARG_kerning,
-        ARG_xscale,
-        ARG_yscale,
-		ARG_ydonwward
-    };
-    const mp_arg_t make_new_args[] = {
-        { MP_QSTR_ttf,			MP_ARG_OBJ  | MP_ARG_KW_ONLY | MP_ARG_REQUIRED	},
-		{ MP_QSTR_kerning,		MP_ARG_BOOL | MP_ARG_KW_ONLY,  {.u_bool = true	}},
-        { MP_QSTR_xscale,		MP_ARG_INT  | MP_ARG_KW_ONLY,  {.u_int = 16		}},
-        { MP_QSTR_yscale,		MP_ARG_INT  | MP_ARG_KW_ONLY,  {.u_int = 16		}},
-		{ MP_QSTR_ydonwward,    MP_ARG_INT  | MP_ARG_KW_ONLY,  {.u_int = 1		}},
-    };
-    mp_arg_val_t args[MP_ARRAY_SIZE(make_new_args)];
-    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(make_new_args), make_new_args, args);
-
-	// create new object
-	SFT *self = m_new_obj(SFT);
-	self->base.type = &amoled_TTF_type;
+// font(font_filename)
+mp_obj_t amoled_AMOLED_ttf_load(size_t n_args, const mp_obj_t *args) {
 	
-	const char *filename = mp_obj_str_get_str((void *) args[ARG_ttf].u_rom_obj);
+    //amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+	const char *filename = mp_obj_str_get_str(args[1]);
+	
+	// create new sft object
+	SFT *sft = heap_caps_malloc(sizeof(SFT), MALLOC_CAP_8BIT);
+	if (sft == NULL) {
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate sft."));
+	}
 	int32_t size=0;
 	
-	self->xScale    = args[ARG_xscale].u_int;
-	self->yScale    = args[ARG_yscale].u_int;
-	self->kerning 	= args[ARG_yscale].u_int;
-	self->flags		= args[ARG_ydonwward].u_bool;
+	sft->xScale    = 16;
+	sft->yScale    = 16;
+	sft->kerning 	= true;
+	sft->flags		= SFT_DOWNWARD_Y;
 	
     //Create sft_font in SPIRAM
-	if (!(self->font = heap_caps_malloc(sizeof self->font, MALLOC_CAP_8BIT))) {
+	sft->font = heap_caps_malloc(sizeof(SFT_Font), MALLOC_CAP_8BIT);
+	if (sft->font == NULL) {
 		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate sft font."));
 	}
 
 	mp_file_t 	*fp;
-	//Use Amoled file pointer to opren font file
+	
+	//Open font file
 	fp = mp_open(filename, "rb");	
 	
 	if (fp == NULL) {
@@ -2289,10 +2124,10 @@ mp_obj_t amoled_TTF_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_
 	}
 
 	//Allocatate font memory buffer
-	self->font->memory = heap_caps_aligned_alloc(RAM_ALIGNMENT, size + 1, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+	sft->font->memory = heap_caps_aligned_alloc(RAM_ALIGN, size +1, RAM_ALLOC);
 	
 	//Check if memory allocation was OK
-	if(self->font->memory == NULL) {
+	if(sft->font->memory == NULL) {
 		mp_close(fp);
 		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate font memory."));
 	}
@@ -2301,59 +2136,73 @@ mp_obj_t amoled_TTF_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_
 	mp_seek(fp, 0, MP_SEEK_SET);
 
 	//Read nsize bytes of fp to data
-	self->font->size = mp_readinto(fp, (void *) self->font->memory, size);
+	sft->font->size = mp_readinto(fp, (void *) sft->font->memory, size);
 	
-	if(self->font->size != size) {
+	if(sft->font->size != size) {
 		mp_close(fp);
 		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot read full file."));
 	} else {
-		//self->sft.font->memory[nread] = '\0';
-		self->font->source = SrcMapping;
+		//sft->font->memory[nread] = '\0';								 
+		sft->font->source = SrcMapping;
 	}
 
 	//Close the file
 	mp_close(fp);
 	
 	//Proceed font initialisation
-	if(init_font(self->font) != 0) {
+	if(init_font(sft->font) != 0) {
 		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot initialize font."));
 	} else {
-		return MP_OBJ_FROM_PTR(self);
+		return MP_OBJ_FROM_PTR(sft);
 	}
 }
 
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_load_obj, 2, 2, amoled_AMOLED_ttf_load);
 
-//Scale font : scale(x_scale, y_scale) 
-static mp_obj_t amoled_TTF_scale(size_t n_args, const mp_obj_t *args) {
+
+static mp_obj_t amoled_AMOLED_ttf_free(size_t n_args, const mp_obj_t *args) {
 	
-    SFT *self = MP_OBJ_TO_PTR(args[0]);
+    SFT *sft = (SFT *)MP_OBJ_TO_PTR(args[1]);
+	
+    heap_caps_free((void *)sft->font->memory);
+	sft->font->memory = NULL;
+	heap_caps_free((void *)sft->font);
+	sft->font = NULL;
+	sft = NULL;
 
-	if (n_args > 1) {
-		if (mp_obj_is_float(args[1])) {
-            self->xScale = (double)mp_obj_float_get(args[1]);
-        }
-        if (mp_obj_is_int(args[1])) {
-            self->xScale = (double)mp_obj_get_int(args[1]);
-		}
-	} else {
-		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("TTF scale need at least 1 int or float argument"));
+    return mp_const_none;
+}
+
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_free_obj, 2, 2, amoled_AMOLED_ttf_free);
+
+
+//Scale font : ttf_scale(font, x_scale, [y_scale]) 
+static mp_obj_t amoled_AMOLED_ttf_scale(size_t n_args, const mp_obj_t *args) {
+	
+	SFT *sft = (SFT *) MP_OBJ_TO_PTR(args[1]);
+	
+ 	if (mp_obj_is_float(args[2])) {
+        sft->xScale = mp_obj_float_get(args[2]);
+    }
+    if (mp_obj_is_int(args[2])) {
+        sft->xScale = (float)mp_obj_get_int(args[2]);
 	}
 	
-	if (n_args > 2) {
-		if (mp_obj_is_float(args[2])) {
-            self->yScale = (double)mp_obj_float_get(args[2]);
+	if (n_args > 3) {
+		if (mp_obj_is_float(args[3])) {
+            sft->yScale = mp_obj_float_get(args[3]);
         }
-        if (mp_obj_is_int(args[2])) {
-            self->yScale = (double)mp_obj_get_int(args[2]);
+        if (mp_obj_is_int(args[3])) {
+            sft->yScale = (float)mp_obj_get_int(args[3]);
 		}
 	} else {
-		self->yScale = self->xScale;
+		sft->yScale = sft->xScale;
 	}
 
     return mp_const_none;		
 }
 
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_TTF_scale_obj, 2, 3, amoled_TTF_scale);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_scale_obj, 3, 4, amoled_AMOLED_ttf_scale);
 
 
 //Draw a TTF text :  ttf_draw(font, string, x, y[, fg, bg])
@@ -2415,7 +2264,7 @@ static mp_obj_t amoled_AMOLED_ttf_draw(size_t n_args, const mp_obj_t *args) {
 	uint8_t chr;
 
 	//Process every char
-	for (uint8_t i = 0; i < str_8_len; i++) {
+	for (size_t i = 0; i < str_8_len; i++) {
 		//chr = str_32[i];
 		chr = str_8[i];
 		
@@ -2437,7 +2286,7 @@ static mp_obj_t amoled_AMOLED_ttf_draw(size_t n_args, const mp_obj_t *args) {
 		
 		//Setup the glyph image and render glyph
 		g_img.width = (g_mtx.minWidth + 3) & ~3;  // round to closest upper value multiple of 4 (0,4,8,aso...)
-		g_img.height = g_mtx.minHeight;
+		g_img.height = g_mtx.minHeight;           // Can be optimized since redundant
 		uint8_t pixels[g_img.width * g_img.height];
 		g_img.pixels = pixels;
 		if(sft_render(sft, g_id, g_img) < 0) {
@@ -2481,7 +2330,7 @@ static mp_obj_t amoled_AMOLED_ttf_draw(size_t n_args, const mp_obj_t *args) {
 					break;
 				}
 				fram_buf_idx++;    // Next framebuffer pixel
-				gl_idx ++;	  // Next glyph pixel
+				gl_idx++;	       // Next glyph pixel
 			}
 		}
 		x_nextchar += g_mtx.advanceWidth;    // next glyph must adwvance 
@@ -2518,7 +2367,7 @@ static mp_obj_t amoled_AMOLED_ttf_len(size_t n_args, const mp_obj_t *args) {
 	uint8_t chr;
 
 	//Process every char
-	for (uint8_t i = 0; i < str_8_len; i++) {
+	for (size_t i = 0; i < str_8_len; i++) {
 		//chr = str_32[i];
 		chr = str_8[i];
 		
@@ -2550,6 +2399,243 @@ static mp_obj_t amoled_AMOLED_ttf_len(size_t n_args, const mp_obj_t *args) {
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_len_obj, 3, 3, amoled_AMOLED_ttf_len);
 
 
+//Create a pre-rendered glyphet :  ttf_gl_create(font, string)
+static mp_obj_t amoled_AMOLED_ttf_gl_create(size_t n_args, const mp_obj_t *args) {
+    //amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+	SFT *sft = (SFT *) MP_OBJ_TO_PTR(args[1]);
+	//Arg1 string and transform UTF32
+	const char *str_8 = (char *) mp_obj_str_get_str(args[2]);
+	uint16_t str_8_len = strlen(str_8);
+	//Transform to UTF32
+	//uint32_t str_32[str_8_len];
+	//utf8_to_utf32(str_8, str_32, str_8_len);
+	//Arg2&3 are positions
+
+	SFT_Glyph g_id;
+	SFT_GMetrics g_mtx;
+	SFT_Image g_img;
+	//SFT_Glyph left_glyph // Unusefull here
+	
+	//Allocate the glyphset 
+	acc_Glyphset *glyphset = heap_caps_calloc(sizeof(acc_Glyphset), 1 , MALLOC_CAP_8BIT);
+	if (glyphset == NULL) {
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate Glyphset."));
+	}
+	glyphset->chr_nb = heap_caps_calloc(sizeof(uint32_t), str_8_len , MALLOC_CAP_8BIT);
+	if (glyphset->chr_nb == NULL) {
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate Glyphset char table."));
+	}
+	glyphset->chr_glyph = heap_caps_calloc(sizeof(acc_Glyph), str_8_len , MALLOC_CAP_8BIT);
+	if (glyphset->chr_glyph == NULL) {
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate Glyphset char glyph table."));
+	}
+	
+	uint8_t chr;
+
+	//Process every char
+	for (uint16_t i = 0; i < str_8_len; i++) {
+		//chr = str_32[i];
+		chr = str_8[i];
+		
+		//Search the gliph_id within the Font
+		if(sft_lookup(sft, chr, &g_id) < 0) {
+			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("TTF Unknown glyph"));
+		}
+
+		//Then Get Glyph Metrics
+		if(sft_gmetrics(sft, g_id, &g_mtx) < 0) {
+			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("TTF Bad glyph metrics"));
+		}	
+		
+		//Setup the glyph image and render glyph
+		g_img.width = (g_mtx.minWidth + 3) & ~3;  // round to closest upper value multiple of 4 (0,4,8,aso...)
+		g_img.height = g_mtx.minHeight;		      // Can be optimized since redundant
+		uint8_t pixels[g_img.width * g_img.height];
+		g_img.pixels = pixels;
+		if(sft_render(sft, g_id, g_img) < 0) {
+			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("TTF Error SFT rendering"));
+		}
+		
+		//Put the rendered glyph in memory
+		glyphset->chr_nb[i] = chr;	
+		glyphset->chr_glyph[i].advanceWidth = g_mtx.advanceWidth;
+		glyphset->chr_glyph[i].leftSideBearing = g_mtx.leftSideBearing;
+		glyphset->chr_glyph[i].yOffset = g_mtx.yOffset;
+		glyphset->chr_glyph[i].width = g_img.width; //g_mtx.minWidth;
+		glyphset->chr_glyph[i].height = g_mtx.minHeight;
+		
+		//Allocate memory for glyph (256 color = 1 BPP)
+		glyphset->chr_glyph[i].pixels = heap_caps_aligned_calloc(RAM_ALIGN, g_img.width * g_img.height , 1,  RAM_ALLOC);
+		if (glyphset->chr_glyph[i].pixels == NULL) {
+			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate Glyph Memory."));
+		}	
+		for(uint16_t j = 0; j < g_img.width * g_img.height; j++) {
+			glyphset->chr_glyph[i].pixels[j] = g_img.pixels[j];
+		}
+	}
+	
+	//Finally tell glyphset how many 
+	glyphset->char_total = str_8_len;
+	
+	//Return pointer to glyphset
+    return MP_OBJ_FROM_PTR(glyphset);
+}
+
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_gl_create_obj, 3, 3, amoled_AMOLED_ttf_gl_create);
+
+
+//Draw a TTF text using pre-redered glyphset:  ttf_gl_draw(glyphset, string, x, y[, fg, bg])
+static mp_obj_t amoled_AMOLED_ttf_gl_draw(size_t n_args, const mp_obj_t *args) {
+    amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+	acc_Glyphset *glyphset = (acc_Glyphset *) MP_OBJ_TO_PTR(args[1]);
+	//Arg1 string and transform UTF32
+	const char *str_8 = (char *) mp_obj_str_get_str(args[2]);
+	uint16_t str_8_len = strlen(str_8);
+	
+	//Transform to UTF32
+	//uint32_t str_32[str_8_len];
+	//utf8_to_utf32(str_8, str_32, str_8_len);
+	
+	//Arg2&3 are positions
+    mp_int_t x0 = mp_obj_get_int(args[3]);
+    mp_int_t y0 = mp_obj_get_int(args[4]);
+	// Arg 4 if front Color, White by default
+    mp_int_t fg_color = (n_args > 5) ? mp_obj_get_int(args[5]) : WHITE; 
+	// Arg 5 if back Color, if specified we will write over the frame buffer
+	mp_int_t bg_color = (n_args > 6) ? mp_obj_get_int(args[6]) : BLACK;
+	// if no Arg 6, we will not overwrite frame buffer	
+	bool bg_filled = (n_args > 6) ? true : false;
+	
+	mp_int_t x_nextchar = x0;
+	mp_int_t y_nextchar = y0;
+	mp_int_t x_pen = x0;
+	mp_int_t y_pen = y0;
+	mp_int_t ymin = y0;
+	mp_int_t ymax = y0;
+
+	//Get bpp process for antialiasing process
+	uint32_t 	fltr_col_rd = self->bpp_process.fltr_col_rd;
+	uint8_t 	bitsw_col_rd = self->bpp_process.bitsw_col_rd;
+	uint32_t	fltr_col_gr = self->bpp_process.fltr_col_gr;
+	uint8_t 	bitsw_col_gr = self->bpp_process.bitsw_col_gr;
+	uint32_t	fltr_col_bl = self->bpp_process.fltr_col_bl;
+
+	//Process Fg color decomposition
+	mp_int_t fg_color_sw = (fg_color >> 8) | (fg_color << 8); //Because of Little Indian
+	mp_int_t fg_color_rd = (fg_color_sw & fltr_col_rd) >> bitsw_col_rd;
+	mp_int_t fg_color_gr = (fg_color_sw & fltr_col_gr) >> bitsw_col_gr;
+	mp_int_t fg_color_bl = (fg_color_sw & fltr_col_bl);
+		
+	// Variable to process color mitigation and final color
+	mp_int_t mfg_color_rd = 0;
+	mp_int_t mfg_color_gr = 0;
+	mp_int_t mfg_color_bl = 0;
+	mp_int_t mfg_color = 0;
+	
+	//SFT_Glyph g_id;
+	//SFT_GMetrics g_mtx;
+	//SFT_Image g_img;
+	//SFT_Glyph left_glyph = 0;
+	//SFT_Kerning kerning = { .xShift=0, .yShift=0,};
+	
+	uint16_t gl_idx;  	 // index for rendered glyph
+	size_t fram_buf_idx; // index for frame buffer
+	uint8_t gl_data;   	 // temporary glyph pixel value (0-255)
+	uint8_t chr;
+
+	//Process every char
+	for (uint16_t i = 0; i < str_8_len; i++) {
+		//chr = str_32[i];
+		chr = str_8[i];
+		
+		//Search the gliph_id within the pre-rendered glyphset, replacing lookup...
+		uint8_t j=0;
+		while ((j < glyphset->char_total) & (chr !=  glyphset->chr_nb[j])){
+			j++;
+		}
+		if(j >= glyphset->char_total) {
+			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("No pre-rendered Glyphset"));
+		}
+		
+		/*Kerning (space correction) is for now unavailable for pre-rendered glyphset as the font
+		can be unloaded from memory. Maybe we can simulate thank to glyph info we have gathered...
+		if(sft->kerning && (left_glyph != 0)) {
+			sft_kerning(sft, left_glyph, chr, &kerning);
+			left_glyph = chr;  // Update last_glyph
+		}
+		x_nextchar += kerning.xShift;		// Correction of x coordonates for next char 
+		y_nextchar = y0 + kerning.yShift;	// 
+		*/
+		
+		//Set pen position from nextchar position and glyph coodonate
+		x_pen = x_nextchar + glyphset->chr_glyph[j].leftSideBearing;
+		y_pen = y_nextchar + glyphset->chr_glyph[j].yOffset;
+		 
+		//Update Y min and max, will help diplay refresh later
+		ymin = min_val(ymin , y_pen);
+		ymax = max_val(ymax , y_pen + glyphset->chr_glyph[j].height);
+			
+		//Now put the Glyph to the display frame_buffer	
+		gl_idx = 0;  //Glyph pointer set to 0 at beginning
+		for (uint16_t y_gly = 0; y_gly < glyphset->chr_glyph[j].height; y_gly++) {		// for every line of the glyph
+			fram_buf_idx = (y_pen + y_gly) * self->width + x_pen;						// fram_buf_idx is the frame buffer start index for each line
+			for (uint16_t x_gly = 0; x_gly < glyphset->chr_glyph[j].width; x_gly++) {	// for every cols of the glyph
+				gl_data = glyphset->chr_glyph[j].pixels[gl_idx];		                // get glyph pixel value (1 Byte)
+	
+				switch (gl_data) {
+					case 255 : // If full 255 => Plain Fg color
+						self->fram_buf[fram_buf_idx] = fg_color;
+					break;
+
+					case 0 :  // If 0 => Bg color
+						if (bg_filled) { self->fram_buf[fram_buf_idx] = bg_color; }
+					break;
+
+					default:	//Otherwise, moderate color if aliasing activated
+						mfg_color_rd = ((gl_data * fg_color_rd) >> 8) << bitsw_col_rd;
+						mfg_color_gr = ((gl_data * fg_color_gr) >> 8) << bitsw_col_gr;
+						mfg_color_bl = (gl_data * fg_color_bl) >> 8;
+						mfg_color = ( mfg_color_rd | mfg_color_gr | mfg_color_bl);
+						self->fram_buf[fram_buf_idx] = (uint16_t) (mfg_color >> 8) | (mfg_color << 8); //Because of little indian
+					break;
+				}
+				fram_buf_idx++;    // Next framebuffer pixel
+				gl_idx++;	       // Next glyph pixel
+			}
+		}
+		x_nextchar += glyphset->chr_glyph[j].advanceWidth;    // next glyph must adwvance 
+	}
+	
+	//Now refresh the display from the frame_buffer (x,y,w,h)
+	refresh_display(self,x0, ymin, x_nextchar - x0 , ymax - ymin);	
+
+    return mp_const_none;
+}
+
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_gl_draw_obj, 5, 7, amoled_AMOLED_ttf_gl_draw);
+
+
+//Release a pre-rendered glyphset :  ttf_gl_release(gl_set)
+static mp_obj_t amoled_AMOLED_ttf_gl_release(size_t n_args, const mp_obj_t *args) {
+	//amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+	acc_Glyphset *glyphset = (acc_Glyphset *) MP_OBJ_TO_PTR(args[1]);
+
+    uint16_t char_total = glyphset->char_total;
+	
+	for (uint16_t i = 0; i < char_total; i++) {
+		heap_caps_free(glyphset->chr_glyph[i].pixels);  // Free pixels of the glyph
+		heap_caps_free(glyphset->chr_glyph); // Free rest of the glyph informations
+		heap_caps_free(glyphset->chr_nb);  // Free rest of the glyph informations
+	}
+	
+	heap_caps_free(glyphset);
+	
+    return mp_const_none;
+}
+
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_ttf_gl_release_obj, 2, 2, amoled_AMOLED_ttf_gl_release);
+
+
 /*-----------------------------------------------------------------------------------------------------
 Below are bitmap related functions
 ------------------------------------------------------------------------------------------------------*/
@@ -2579,7 +2665,6 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_bitmap_obj, 6, 6, amole
 /*----------------------------------------------------------------------------------------------------
 Below are JPG related functions.
 -----------------------------------------------------------------------------------------------------*/
-
 
 /* file input function returns number of bytes read (zero on error)
 jd = Decompression object, buff = Pointer to read buffer, nbytes = Number of bytes to read/remove*/
@@ -2627,66 +2712,76 @@ static mp_obj_t amoled_AMOLED_jpg(size_t n_args, const mp_obj_t *args) {
 	const char *filename = mp_obj_str_get_str(args[1]);
 	mp_int_t x = mp_obj_get_int(args[2]);
 	mp_int_t y = mp_obj_get_int(args[3]);
-
+	
     int (*outfunc)(JDEC *, void *, JRECT *);
-
+	
     JRESULT res;	// Result code of TJpgDec API
     JDEC jdec;		// Decompression object
-    self->work = (void *)heap_caps_aligned_alloc(RAM_ALIGNMENT, MAX_BUFFER, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);	// Pointer to the work area
+	// Pointer to the work area
+	self->work = (void *)heap_caps_aligned_calloc(RAM_ALIGN, MAX_BUFFER, 1, RAM_ALLOC);	
 	IODEV  devid;	// User defined device identifier
     size_t temp_buf_size;
 	
 	devid.fp = mp_open(filename, "rb");
-	if (devid.fp) {
-		// Prepare to decompress
-		res = jd_prepare(&jdec, in_func, self->work, MAX_BUFFER, &devid);
-		if (res == JDR_OK) {
-			// Initialize output device
-			temp_buf_size = 2 * jdec.width * jdec.height;
-			outfunc = out_fast;
-			
-			self->temp_buf = heap_caps_aligned_alloc(RAM_ALIGNMENT, temp_buf_size, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-			
-			if (!self->temp_buf)
-				mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("JPG error while allocating memory"));
-
-			devid.fbuf	= (uint8_t *) self->temp_buf;
-			//devid.fbuf	= (uint16_t *) self->temp_buf;
-			devid.wfbuf = jdec.width;
-			devid.self	= self;
-			res			= jd_decomp(&jdec, outfunc, 0); // Start to decompress with 1/1 scaling
-			
-			if (res == JDR_OK) {
-				
-				size_t jpg_idx=0;
-				size_t fram_buf_idx=0;
-				uint16_t color;
-				
-				//Copy decompressed JPG from DEVID to Frame Buffer
-				
-				for(uint16_t line=0; line < jdec.height; line++) {
-					fram_buf_idx = (y + line)*self->width + x;
-					for(uint16_t col=0; col < jdec.width; col++) {
-						color = devid.fbuf[jpg_idx+1] << 8 | devid.fbuf[jpg_idx];
-						self->fram_buf[fram_buf_idx] = color;
-						fram_buf_idx++;
-						jpg_idx += 2;
-					}
-				}
-			} else {
-				mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("JPG decompression error"));
-			}
-			
-			heap_caps_free((void*)self->temp_buf); // Discard frame buffer
-			self->temp_buf = NULL;
-			devid.fbuf = NULL;
-			
-		} else {
-			mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("JPG preparation failed."));
-		}
-		mp_close(devid.fp);
+	if (devid.fp == NULL) {
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot open JPG file."));
 	}
+	
+	// Prepare to decompress
+	res = jd_prepare(&jdec, in_func, self->work, MAX_BUFFER, &devid);
+	if (res != JDR_OK) {
+		mp_close(devid.fp);
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("JPG preparation failed."));
+	}
+	
+	// Initialize output device
+	temp_buf_size = 2 * jdec.width * jdec.height;
+	outfunc = out_fast;
+	
+	// Initialise temp_buf
+	self->temp_buf = heap_caps_aligned_calloc(RAM_ALIGN, temp_buf_size, 1, RAM_ALLOC);
+	if (!self->temp_buf) {
+		mp_close(devid.fp);
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("JPG error while allocating memory"));
+	}
+	
+	devid.fbuf	= (uint8_t *) self->temp_buf;
+	devid.wfbuf = jdec.width;
+	devid.self	= self;
+	res			= jd_decomp(&jdec, outfunc, 0); // Start to decompress with 1/1 scaling
+	
+	if (res != JDR_OK) {
+		heap_caps_free(self->temp_buf);
+		mp_close(devid.fp);
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("JPG decompression error"));
+	}
+	
+	size_t jpg_idx=0;
+	size_t fram_buf_idx=0;
+	uint16_t color;
+	
+	//Copy decompressed JPG from DEVID to Frame Buffer
+	for(uint16_t line=0; line < jdec.height; line++) {
+		fram_buf_idx = (y + line)*self->width + x;
+		for(uint16_t col=0; col < jdec.width; col++) {
+			color = devid.fbuf[jpg_idx+1] << 8 | devid.fbuf[jpg_idx];
+			self->fram_buf[fram_buf_idx] = color;
+			fram_buf_idx++;
+			jpg_idx += 2;
+		}
+	}
+	
+	devid.fbuf = NULL;		
+	heap_caps_free(self->temp_buf); // Discard frame buffer
+	self->temp_buf = NULL;
+	mp_close(devid.fp);
 	heap_caps_free(self->work); // Discard work area
+	self->work = NULL;
+	
 	//Refresh display (whole display for now)
 	refresh_display(self,0,0,self->width,self->height);
 	//refresh_display(self,x,y,jdec.width,jdec.height);
@@ -2733,71 +2828,88 @@ static mp_obj_t amoled_AMOLED_jpg_decode(size_t n_args, const mp_obj_t *args) {
 	const char	*filename;
 	mp_int_t	x = 0, y = 0, width = 0, height = 0;
 
-	if (n_args == 2 || n_args == 6) {
-		filename = mp_obj_str_get_str(args[1]);
-		if (n_args == 6) {
-			x	   = mp_obj_get_int(args[2]);
-			y	   = mp_obj_get_int(args[3]);
-			width  = mp_obj_get_int(args[4]);
-			height = mp_obj_get_int(args[5]);
-		}
-		self->work = (void *) heap_caps_aligned_alloc(RAM_ALIGNMENT, MAX_BUFFER, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM); // Pointer to the work area
-
-		JRESULT res;   // Result code of TJpgDec API
-		JDEC	jdec;  // Decompression object
-		IODEV	devid; // User defined device identifier
-		size_t	temp_buf_size = 0;
-
-		devid.fp = mp_open(filename, "rb");
-		if (devid.fp) {
-			// Prepare to decompress
-			res = jd_prepare(&jdec, in_func, self->work, MAX_BUFFER, &devid);
-			if (res == JDR_OK) {
-				if (n_args < 6) {
-					x	   = 0;
-					y	   = 0;
-					width  = jdec.width;
-					height = jdec.height;
-				}
-				// Initialize output device
-				devid.left	 = x;
-				devid.top	 = y;
-				devid.right	 = x + width - 1;
-				devid.bottom = y + height - 1;
-
-				temp_buf_size			   = 2 * width * height;
-				self->temp_buf = heap_caps_aligned_alloc(RAM_ALIGNMENT, temp_buf_size, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-				if (self->temp_buf) {
-					memset(self->temp_buf, 0xBEEF, temp_buf_size);
-				} else {
-					mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("out of memory"));
-				}
-
-				devid.fbuf	= (uint8_t *) self->temp_buf;
-				devid.wfbuf = jdec.width;
-				devid.self	= self;
-				res			= jd_decomp(&jdec, out_crop, 0); // Start to decompress with 1/1 scaling
-				if (res != JDR_OK) {
-					mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("jpg decompress failed."));
-				}
-
-			} else {
-				mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("jpg prepare failed."));
-			}
-			mp_close(devid.fp);
-		}
-		heap_caps_free(self->work); // Discard work area
-
-		mp_obj_t result[3] = {
-			mp_obj_new_bytearray(temp_buf_size, (mp_obj_t *) self->temp_buf),
-			mp_obj_new_int(width),
-			mp_obj_new_int(height)};
-
-		return mp_obj_new_tuple(3, result);
+	if (n_args != 2 && n_args != 6) {
+		mp_raise_TypeError(MP_ERROR_TEXT("jpg_decode requires either 2 or 6 arguments"));
+		return mp_const_none;
 	}
+	
+	filename = mp_obj_str_get_str(args[1]);
+	if (n_args == 6) {
+		x	   = mp_obj_get_int(args[2]);
+		y	   = mp_obj_get_int(args[3]);
+		width  = mp_obj_get_int(args[4]);
+		height = mp_obj_get_int(args[5]);
+	}
+	
+	self->work = (void *) heap_caps_aligned_alloc(RAM_ALIGN, MAX_BUFFER, RAM_ALLOC); // Pointer to the work area
 
-	mp_raise_TypeError(MP_ERROR_TEXT("jpg_decode requires either 2 or 6 arguments"));
-	return mp_const_none;
+	JRESULT res;   // Result code of TJpgDec API
+	JDEC	jdec;  // Decompression object
+	IODEV	devid; // User defined device identifier
+	size_t	temp_buf_size = 0;
+
+	devid.fp = mp_open(filename, "rb");
+	if (devid.fp == NULL) {
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot open JPG file."));
+	}
+	
+	// Prepare to decompress
+	res = jd_prepare(&jdec, in_func, self->work, MAX_BUFFER, &devid);
+	if (res != JDR_OK) {
+		mp_close(devid.fp);
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("JPG preparation failed."));
+	}
+	
+	if (n_args < 6) {
+		x	   = 0;
+		y	   = 0;
+		width  = jdec.width;
+		height = jdec.height;
+	}
+	
+	// Initialize output device
+	devid.left	 = x;
+	devid.top	 = y;
+	devid.right	 = x + width - 1;
+	devid.bottom = y + height - 1;
+
+	temp_buf_size = 2 * width * height;
+	self->temp_buf = heap_caps_aligned_calloc(RAM_ALIGN, temp_buf_size, 1, RAM_ALLOC);
+	if (!self->temp_buf) {
+		mp_close(devid.fp);
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("JPG error while allocating memory"));
+	}
+	
+	memset(self->temp_buf, 0xBEEF, temp_buf_size);
+
+	devid.fbuf	= (uint8_t *) self->temp_buf;
+	devid.wfbuf = jdec.width;
+	devid.self	= self;
+	res			= jd_decomp(&jdec, out_crop, 0); // Start to decompress with 1/1 scaling
+	
+	if (res != JDR_OK) {
+		heap_caps_free(self->temp_buf);
+		mp_close(devid.fp);
+		heap_caps_free(self->work);
+		mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("JPG decompression error"));
+	}
+	
+	devid.fbuf = NULL;		
+	heap_caps_free(self->temp_buf); // Discard frame buffer
+	self->temp_buf = NULL;
+	mp_close(devid.fp);
+	heap_caps_free(self->work); // Discard work area
+	self->work = NULL;
+
+	mp_obj_t result[3] = {
+		mp_obj_new_bytearray(temp_buf_size, (mp_obj_t *) self->temp_buf),
+		mp_obj_new_int(width),
+		mp_obj_new_int(height)};
+
+	return mp_obj_new_tuple(3, result);
 }
 
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(amoled_AMOLED_jpg_decode_obj, 2, 6, amoled_AMOLED_jpg_decode);
@@ -2841,7 +2953,7 @@ static mp_obj_t amoled_AMOLED_swap_xy(mp_obj_t self_in, mp_obj_t swap_axes_in) {
 
 static MP_DEFINE_CONST_FUN_OBJ_2(amoled_AMOLED_swap_xy_obj, amoled_AMOLED_swap_xy);
 
-/*
+
 static mp_obj_t amoled_AMOLED_set_gap(mp_obj_t self_in, mp_obj_t x_gap_in, mp_obj_t y_gap_in) {
     amoled_AMOLED_obj_t *self = MP_OBJ_TO_PTR(self_in);
     self->col_start = mp_obj_get_int(x_gap_in);
@@ -2849,7 +2961,7 @@ static mp_obj_t amoled_AMOLED_set_gap(mp_obj_t self_in, mp_obj_t x_gap_in, mp_ob
     return mp_const_none;
 }
 
-static MP_DEFINE_CONST_FUN_OBJ_3(amoled_AMOLED_set_gap_obj, amoled_AMOLED_set_gap);*/
+static MP_DEFINE_CONST_FUN_OBJ_3(amoled_AMOLED_set_gap_obj, amoled_AMOLED_set_gap);
 
 
 static mp_obj_t amoled_AMOLED_invert_color(mp_obj_t self_in, mp_obj_t invert_in) {
@@ -3083,13 +3195,17 @@ static const mp_rom_map_elem_t amoled_AMOLED_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_text_len),        MP_ROM_PTR(&amoled_AMOLED_text_len_obj)        },
     { MP_ROM_QSTR(MP_QSTR_write),           MP_ROM_PTR(&amoled_AMOLED_write_obj)           },
     { MP_ROM_QSTR(MP_QSTR_write_len),       MP_ROM_PTR(&amoled_AMOLED_write_len_obj)       },
-    { MP_ROM_QSTR(MP_QSTR_draw),            MP_ROM_PTR(&amoled_AMOLED_draw_obj)            },
-    { MP_ROM_QSTR(MP_QSTR_draw_len),        MP_ROM_PTR(&amoled_AMOLED_draw_len_obj)        },
+	{ MP_ROM_QSTR(MP_QSTR_ttf_load),   		MP_ROM_PTR(&amoled_AMOLED_ttf_load_obj)        },
+	{ MP_ROM_QSTR(MP_QSTR_ttf_free),   		MP_ROM_PTR(&amoled_AMOLED_ttf_free_obj)        },
+	{ MP_ROM_QSTR(MP_QSTR_ttf_scale),   	MP_ROM_PTR(&amoled_AMOLED_ttf_scale_obj)       },
 	{ MP_ROM_QSTR(MP_QSTR_ttf_draw),   		MP_ROM_PTR(&amoled_AMOLED_ttf_draw_obj)        },
-	{ MP_ROM_QSTR(MP_QSTR_ttf_len),   		MP_ROM_PTR(&amoled_AMOLED_ttf_len_obj)         },	
+	{ MP_ROM_QSTR(MP_QSTR_ttf_len),   		MP_ROM_PTR(&amoled_AMOLED_ttf_len_obj)         },
+	{ MP_ROM_QSTR(MP_QSTR_ttf_gl_create),   MP_ROM_PTR(&amoled_AMOLED_ttf_gl_create_obj)   },
+	{ MP_ROM_QSTR(MP_QSTR_ttf_gl_draw),   	MP_ROM_PTR(&amoled_AMOLED_ttf_gl_draw_obj)     },
+	{ MP_ROM_QSTR(MP_QSTR_ttf_gl_release),  MP_ROM_PTR(&amoled_AMOLED_ttf_gl_release_obj)  },
     { MP_ROM_QSTR(MP_QSTR_mirror),          MP_ROM_PTR(&amoled_AMOLED_mirror_obj)          },
     { MP_ROM_QSTR(MP_QSTR_swap_xy),         MP_ROM_PTR(&amoled_AMOLED_swap_xy_obj)         },
-//    { MP_ROM_QSTR(MP_QSTR_set_gap),         MP_ROM_PTR(&amoled_AMOLED_set_gap_obj)         },
+    { MP_ROM_QSTR(MP_QSTR_set_gap),         MP_ROM_PTR(&amoled_AMOLED_set_gap_obj)         },
     { MP_ROM_QSTR(MP_QSTR_invert_color),    MP_ROM_PTR(&amoled_AMOLED_invert_color_obj)    },
     { MP_ROM_QSTR(MP_QSTR_disp_off),        MP_ROM_PTR(&amoled_AMOLED_disp_off_obj)        },
     { MP_ROM_QSTR(MP_QSTR_disp_on),         MP_ROM_PTR(&amoled_AMOLED_disp_on_obj)         },
@@ -3099,7 +3215,7 @@ static const mp_rom_map_elem_t amoled_AMOLED_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_height),          MP_ROM_PTR(&amoled_AMOLED_height_obj)          },
     { MP_ROM_QSTR(MP_QSTR_width),           MP_ROM_PTR(&amoled_AMOLED_width_obj)           },
     { MP_ROM_QSTR(MP_QSTR_rotation),        MP_ROM_PTR(&amoled_AMOLED_rotation_obj)        },
-    { MP_ROM_QSTR(MP_QSTR_tearing),         MP_ROM_PTR(&amoled_AMOLED_tearing_obj)        },	
+    { MP_ROM_QSTR(MP_QSTR_tearing),         MP_ROM_PTR(&amoled_AMOLED_tearing_obj)         },	
     { MP_ROM_QSTR(MP_QSTR_vscroll_area),    MP_ROM_PTR(&amoled_AMOLED_vscroll_area_obj)    },
     { MP_ROM_QSTR(MP_QSTR_vscroll_start),   MP_ROM_PTR(&amoled_AMOLED_vscroll_start_obj)   },
     { MP_ROM_QSTR(MP_QSTR___del__),         MP_ROM_PTR(&amoled_AMOLED_deinit_obj)          },
@@ -3109,15 +3225,6 @@ static const mp_rom_map_elem_t amoled_AMOLED_locals_dict_table[] = {
 };
 
 static MP_DEFINE_CONST_DICT(amoled_AMOLED_locals_dict, amoled_AMOLED_locals_dict_table);
-
-//amoled.TTF dictionnary
-static const mp_rom_map_elem_t amoled_TTF_locals_dict_table[] = {
-	{ MP_ROM_QSTR(MP_QSTR_scale),	MP_ROM_PTR(&amoled_TTF_scale_obj)	 },
-	{ MP_ROM_QSTR(MP_QSTR_deinit),  MP_ROM_PTR(&amoled_TTF_deinit_obj)   },
-    { MP_ROM_QSTR(MP_QSTR___del__), MP_ROM_PTR(&amoled_TTF_deinit_obj)   },
-};
-
-static MP_DEFINE_CONST_DICT(amoled_TTF_locals_dict, amoled_TTF_locals_dict_table);
 
 
 #ifdef MP_OBJ_TYPE_GET_SLOT
@@ -3130,15 +3237,6 @@ MP_DEFINE_CONST_OBJ_TYPE(
     locals_dict, (mp_obj_dict_t *)&amoled_AMOLED_locals_dict
 );
 
-MP_DEFINE_CONST_OBJ_TYPE(
-    amoled_TTF_type,
-    MP_QSTR_TTF,
-    MP_TYPE_FLAG_NONE,
-    print, amoled_TTF_print,
-    make_new, amoled_TTF_make_new,
-    locals_dict, (mp_obj_dict_t *)&amoled_TTF_locals_dict
-);
-
 #else
 	
 const mp_obj_type_t amoled_AMOLED_type = {
@@ -3147,14 +3245,6 @@ const mp_obj_type_t amoled_AMOLED_type = {
     .print       = amoled_AMOLED_print,
     .make_new    = amoled_AMOLED_make_new,
     .locals_dict = (mp_obj_dict_t *)&amoled_AMOLED_locals_dict,
-};
-
-const mp_obj_type_t amoled_TTF_type = {
-	{ &mp_type_type },
-	.name 		= MP_QSTR_TTF,
-	.print 		= amoled_TTF_print,
-	.make_new	= amoled_TTF_make_new,
-	.locals_dic = (mp_obj_dict_t *)&amoled_TTF_locals_dict,
 };
 
 #endif
@@ -3166,7 +3256,6 @@ static const mp_map_elem_t mp_module_amoled_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__),   MP_OBJ_NEW_QSTR(MP_QSTR_amoled)       },
     { MP_ROM_QSTR(MP_QSTR_AMOLED),     (mp_obj_t)&amoled_AMOLED_type         },
     { MP_ROM_QSTR(MP_QSTR_QSPIPanel),  (mp_obj_t)&amoled_qspi_bus_type       },
-    { MP_ROM_QSTR(MP_QSTR_TTF),  	   (mp_obj_t)&amoled_TTF_type       	 },
     { MP_ROM_QSTR(MP_QSTR_RGB),        MP_ROM_INT(COLOR_SPACE_RGB)           },
     { MP_ROM_QSTR(MP_QSTR_BGR),        MP_ROM_INT(COLOR_SPACE_BGR)           },
     { MP_ROM_QSTR(MP_QSTR_MONOCHROME), MP_ROM_INT(COLOR_SPACE_MONOCHROME)    },
@@ -3194,4 +3283,3 @@ MP_REGISTER_MODULE(MP_QSTR_amoled, mp_module_amoled);
 #else
 MP_REGISTER_MODULE(MP_QSTR_amoled, mp_module_amoled, MODULE_AMOLED_ENABLE);
 #endif
-
