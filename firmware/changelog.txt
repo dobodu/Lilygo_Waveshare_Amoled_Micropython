@@ -1,8 +1,8 @@
-firmware_2026_07_29_BETA.bin
+firmware_2026_08_02_BETA.bin
 
 New release with accelerated TTF rendering (buffered glyphsets)
 
-MicroPython Version :  MicroPython v1.28
+MicroPython Version :  MicroPython v1.28 (latest version August 2026)
 ESP-IDF Version : 5.5.2
 BOARD : LILYGO T4-S3 with ESP32S3 (but work with every Amoled boards)
 
@@ -12,7 +12,7 @@ firmware_2026_05_10_ALPHA.bin
 
 Very first (probably buggy yet) version with accelerated TTF rendering (buffered glyphsets)
 
-MicroPython Version :  MicroPython v1.28
+MicroPython Version :  MicroPython v1.28 (preliminary version May 2026)
 ESP-IDF Version : 5.5.2
 BOARD : LILYGO T4-S3 with ESP32S3 (but work with every Amoled boards)
 
@@ -20,7 +20,7 @@ BOARD : LILYGO T4-S3 with ESP32S3 (but work with every Amoled boards)
 
 firmware_2026_05_02.bin
 
-MicroPython Version :  MicroPython v1.28
+MicroPython Version :  MicroPython v1.28 (preliminary version)
 ESP-IDF Version : 5.5.2
 BOARD : LILYGO T4-S3 with ESP32S3 (but work with every Amoled boards)
 
