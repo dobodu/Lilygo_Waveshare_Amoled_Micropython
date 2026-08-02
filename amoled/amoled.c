@@ -49,7 +49,7 @@ A major part of the code works for 16bpp colorset, event some other are already 
 #include <math.h>
 #include <wchar.h>
 
-#define AMOLED_DRIVER_VERSION "24.01.2026"
+#define AMOLED_DRIVER_VERSION "02.08.2026"
 
 #define SWAP16(a, b) { int16_t t = a; a = b; b = t; }
 #define ABS(N) (((N) < 0) ? (-(N)) : (N))
@@ -2450,7 +2450,8 @@ static mp_obj_t amoled_AMOLED_ttf_gl_create(size_t n_args, const mp_obj_t *args)
 		//Setup the glyph image and render glyph
 		g_img.width = (g_mtx.minWidth + 3) & ~3;  // round to closest upper value multiple of 4 (0,4,8,aso...)
 		g_img.height = g_mtx.minHeight;		      // Can be optimized since redundant
-		uint8_t pixels[g_img.width * g_img.height];
+		uint16_t g_img_size = g_img.width * g_img.height;
+		uint8_t pixels[g_img_size];
 		g_img.pixels = pixels;
 		if(sft_render(sft, g_id, g_img) < 0) {
 			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("TTF Error SFT rendering"));
@@ -2465,11 +2466,15 @@ static mp_obj_t amoled_AMOLED_ttf_gl_create(size_t n_args, const mp_obj_t *args)
 		glyphset->chr_glyph[i].height = g_mtx.minHeight;
 		
 		//Allocate memory for glyph (256 color = 1 BPP)
-		glyphset->chr_glyph[i].pixels = heap_caps_aligned_calloc(RAM_ALIGN, g_img.width * g_img.height , 1,  RAM_ALLOC);
+		if (g_img_size == 0) {   // Avoid issue with blank chars (cannot allocate 0 octet for ram reservation)
+			glyphset->chr_glyph[i].pixels = heap_caps_aligned_calloc(RAM_ALIGN, 4 , 1,  RAM_ALLOC);
+		} else {
+			glyphset->chr_glyph[i].pixels = heap_caps_aligned_calloc(RAM_ALIGN, g_img.width * g_img.height , 1,  RAM_ALLOC);
+		}
 		if (glyphset->chr_glyph[i].pixels == NULL) {
 			mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Cannot allocate Glyph Memory."));
 		}	
-		for(uint16_t j = 0; j < g_img.width * g_img.height; j++) {
+		for(uint16_t j = 0; j < g_img_size; j++) {
 			glyphset->chr_glyph[i].pixels[j] = g_img.pixels[j];
 		}
 	}
