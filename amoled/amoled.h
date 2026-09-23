@@ -68,7 +68,7 @@ extern "C" {
 #define LCD_CMD_HBM_RDDISBV  0x64 // Read Display Brightness Value in HBM Mode
 #define LCD_CMD_HBMCTL 		 0x66 // HBM Control
 
-#define LCD_CMD_SETHBMMODE  0xB0 // Set High Brightness Mode (only for RM67162)
+#define LCD_CMD_SETHBMMODE	0xB0 // Set High Brightness Mode (only for RM67162)
 #define LCD_CMD_SETDISPMODE 0xC2 // Set DSI Mode
 #define LCD_CMD_SETSPIMODE  0xC4 // Set DSPI Mode
 #define LCD_CMD_SWITCHMODE	0xFE // Switch Command Mode
@@ -107,8 +107,6 @@ extern "C" {
 #define COLOR_SPACE_BGR        (1)
 #define COLOR_SPACE_MONOCHROME (2)
 
-#define RAM_ALIGNMENT (16)
-
 
 typedef struct	_Point					Point;
 typedef struct	_Polygon				Polygon;
@@ -116,6 +114,24 @@ typedef struct	_amoled_rotation_t		amoled_rotation_t;
 typedef struct  _bpp_process_t			bpp_process_t;
 typedef struct	_amoled_AMOLED_obj_t	amoled_AMOLED_obj_t;
 typedef struct	_IODEV					IODEV;
+typedef struct  _acc_Glyphset			acc_Glyphset;
+typedef struct  _acc_Glyph				acc_Glyph;
+
+struct _acc_Glyphset {
+	uint16_t    char_total;
+	uint32_t    *chr_nb;
+	acc_Glyph   *chr_glyph;
+};
+
+struct _acc_Glyph {
+	float		advanceWidth;
+	float		leftSideBearing;
+	float		yOffset;
+	uint8_t		width;
+	uint8_t		height;
+	//float		xOffset;	
+	uint8_t		*pixels;
+};
 
 struct _Point {
     mp_float_t x;
@@ -198,10 +214,8 @@ struct _IODEV {
 };
 
 mp_obj_t amoled_AMOLED_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args);
-mp_obj_t amoled_TTF_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args);
 
 extern const mp_obj_type_t amoled_AMOLED_type;
-extern const mp_obj_type_t amoled_TTF_type;
 
 #ifdef  __cplusplus
 }
