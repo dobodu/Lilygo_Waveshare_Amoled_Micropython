@@ -1,6 +1,17 @@
+firmware_2026_10_01.bin
+
+New release with accelerated TTF rendering (buffered glyphsets)
+
+MicroPython Version :  MicroPython v1.30 Preview
+ESP-IDF Version : 5.5.5
+BOARD : LILYGO T4-S3 with ESP32S3 (but work with every Amoled boards)
+
+===============================================================================
+
 firmware_2026_08_02_BETA.bin
 
 New release with accelerated TTF rendering (buffered glyphsets)
+THIS FIRMWARE WAS BUGGY : NO SPIRAM EXTENDED MEMORY WAS SET-UP
 
 MicroPython Version :  MicroPython v1.28 (latest version August 2026)
 ESP-IDF Version : 5.5.2
