@@ -521,8 +521,7 @@ Below are buffers and screen buffers related function.
 
 //Return color from R,G,B values
 static uint16_t colorRGB(uint8_t r, uint8_t g, uint8_t b) {
-    uint16_t c = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3);
-    return ((((c) >> 8) & 0x00FF) | (((c) << 8) & 0xFF00));
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3);
 }
 
 static mp_obj_t amoled_AMOLED_colorRGB(size_t n_args, const mp_obj_t *args) {
@@ -681,7 +680,7 @@ static void fill_frame_buffer(amoled_AMOLED_obj_t *self, uint16_t color, uint16_
 	
 	for (uint16_t line = 0; line < h; line++) {
 		fram_buf_idx = ((y + line) * self->width) + x;
-		wmemset(&self->fram_buf[fram_buf_idx],color, w);
+		wmemset(&self->fram_buf[fram_buf_idx], __builtin_bswap16(color), w);
 	}
 
     if ((!self->hold_display) & (self->auto_refresh)) {
@@ -699,7 +698,7 @@ static void pixel(amoled_AMOLED_obj_t *self, uint16_t x, uint16_t y, uint16_t co
 	uint32_t fram_buf_idx;
 	if ((x < self->width) & (y < self->height)) {
 		fram_buf_idx = (y * self->width) + x;
-		self->fram_buf[fram_buf_idx] = color;
+		self->fram_buf[fram_buf_idx] = __builtin_bswap16(color);
 		if (!self->hold_display & self->auto_refresh) {
 			refresh_display(self,x,y,1,1);
 		}
